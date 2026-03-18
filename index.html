@@ -51,7 +51,7 @@
             <div>
                 <h1 class="text-2xl font-bold text-slate-800 mb-2">语音识别结果汇总与校对工具</h1>
                 <p class="text-slate-500 text-sm">
-                    支持关联 <span class="font-bold text-green-600">Excel / TXT 配置</span> 匹配音频，对比 <span class="font-bold text-slate-700">原始内容</span> 并导出 <span class="font-bold text-blue-600">ZIP</span>。
+                    支持关联 <span class="font-bold text-green-600">Excel / TXT 配置</span> 匹配音频，对比 <span class="font-bold text-slate-700">原始内容</span> 并导出 <span class="font-bold text-blue-600">ZIP (包含音频+文本)</span>。
                 </p>
             </div>
             <div class="flex flex-col items-end gap-1">
@@ -347,17 +347,12 @@
                 let loadedCount = 0;
 
                 lines.forEach(line => {
-                    // 逻辑：寻找包含 .wav 的部分。
-                    // 根据截图 image_979a6c.png，格式大致为：[ID] [文本] [audio-xxx.wav] [时间戳]
                     const wavMatch = line.match(/audio-[\w-]+\.wav/i);
                     if (wavMatch) {
                         const fullLine = line.trim();
                         const fileName = wavMatch[0];
                         const fileNameIdx = fullLine.indexOf(fileName);
                         
-                        // 提取文件名左边的文字
-                        // 通常左边还会有一个长 ID，所以我们要去掉 ID 部分。
-                        // 假设文本在第一个空格之后，文件名之前。
                         const leftPart = fullLine.substring(0, fileNameIdx).trim();
                         const firstSpaceIdx = leftPart.indexOf(' ');
                         
@@ -568,24 +563,37 @@
 
         async function downloadZip() {
             if (processedData.length === 0) return;
-            showToast("正在打包 ZIP...");
+            showToast("正在准备打包 (包含音频+文本)...");
             const zip = new JSZip();
             let txtContent = ""; 
+
+            // 遍历所有处理的数据，将原始 wav 文件和修正文本放入 zip
             processedData.forEach(row => {
-                if (row.rawWavFile) zip.file(row.fileName, row.rawWavFile);
-                txtContent += `${row.fileName}\t${row.transcript.replace(/\n/g, ' ')}\n`;
+                // 将原始导入的 wav 文件对象添加进 zip
+                if (row.rawWavFile) {
+                    zip.file(row.fileName, row.rawWavFile);
+                }
+                // 生成汇总文本内容
+                const cleanText = row.transcript.replace(/\n/g, ' ');
+                txtContent += `${row.fileName}\t${cleanText}\n`;
             });
+
+            // 添加 transcripts.txt 描述文件
             zip.file("transcripts.txt", txtContent);
+
             try {
                 const content = await zip.generateAsync({ type: "blob" });
                 const url = URL.createObjectURL(content);
                 const link = document.createElement("a");
                 link.href = url;
-                link.download = `${baseProjectName}(已匹配导出).zip`;
+                link.download = `${baseProjectName}(完整导出包).zip`;
                 link.click();
                 URL.revokeObjectURL(url);
-                showToast("ZIP 下载已开始");
-            } catch (err) { showToast("导出失败"); }
+                showToast("ZIP 打包成功并已下载");
+            } catch (err) { 
+                showToast("打包失败"); 
+                console.error(err);
+            }
         }
 
         downloadOriginalBtn.addEventListener('click', () => downloadCSV('original'));
